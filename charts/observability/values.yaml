@@ -1,5 +1,4 @@
 # Observability umbrella chart — default values
-# Override these in your ArgoCD Application manifest.
 
 # -- Grafana --
 grafana:
