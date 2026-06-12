@@ -1,0 +1,29 @@
+apiVersion: v2
+name: observability
+description: Umbrella chart for the observability stack (Grafana, Loki, Tempo, Prometheus)
+type: application
+version: 0.1.0
+# appVersion is metadata only — not managed by CI.
+# Image tags are set as value overrides by ArgoCD/Kargo.
+appVersion: "1.0.0"
+
+dependencies:
+  - name: grafana
+    version: "10.5.15"
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+
+  - name: loki
+    version: "7.0.0"
+    repository: https://grafana.github.io/helm-charts
+    condition: loki.enabled
+
+  - name: tempo
+    version: "1.24.4"
+    repository: https://grafana.github.io/helm-charts
+    condition: tempo.enabled
+
+  - name: prometheus
+    version: "29.10.1"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled

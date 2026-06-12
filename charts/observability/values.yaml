@@ -1,0 +1,63 @@
+# Observability umbrella chart — default values
+# Override these in your ArgoCD Application manifest.
+
+# -- Grafana --
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: ""  # Set via ArgoCD / external secret
+  persistence:
+    enabled: false
+  service:
+    type: ClusterIP
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://{{ .Release.Name }}-prometheus-server
+          access: proxy
+          isDefault: true
+        - name: Loki
+          type: loki
+          url: http://{{ .Release.Name }}-loki:3100
+          access: proxy
+        - name: Tempo
+          type: tempo
+          url: http://{{ .Release.Name }}-tempo:3100
+          access: proxy
+
+# -- Loki --
+loki:
+  enabled: true
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    storage:
+      type: filesystem
+  singleBinary:
+    replicas: 1
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+
+# -- Tempo --
+tempo:
+  enabled: true
+  tempo:
+    storage:
+      trace:
+        backend: local
+
+# -- Prometheus --
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: false
+  alertmanager:
+    enabled: false

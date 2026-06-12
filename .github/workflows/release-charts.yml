@@ -1,0 +1,142 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "charts/**"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      # Detect which charts have changed since each chart's last release tag.
+      # Outputs a newline-separated list written to /tmp/changed-charts.
+      - name: Detect changed charts
+        id: detect
+        run: |
+          CHANGED=""
+          for CHART_DIR in charts/*/; do
+            CHART=$(basename "${CHART_DIR}")
+            LAST_TAG=$(git tag --list "${CHART}-v*" --sort=-version:refname | head -1)
+
+            if [ -z "${LAST_TAG}" ]; then
+              COMMITS=$(git log --pretty=format:"%s" -- "${CHART_DIR}")
+            else
+              COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" -- "${CHART_DIR}")
+            fi
+
+            if [ -n "${COMMITS}" ]; then
+              CHANGED="${CHANGED}${CHART}\n"
+            fi
+          done
+
+          printf "%b" "${CHANGED}" > /tmp/changed-charts
+          echo "Changed charts:"
+          cat /tmp/changed-charts
+
+      # Process each changed chart sequentially to avoid concurrent push conflicts.
+      - name: Release changed charts
+        run: |
+          while IFS= read -r CHART; do
+            [ -z "${CHART}" ] && continue
+
+            CHART_DIR="charts/${CHART}"
+            CURRENT=$(grep '^version:' "${CHART_DIR}/Chart.yaml" | awk '{print $2}')
+            LAST_TAG=$(git tag --list "${CHART}-v*" --sort=-version:refname | head -1)
+
+            if [ -z "${LAST_TAG}" ]; then
+              COMMITS=$(git log --pretty=format:"%s" -- "${CHART_DIR}")
+            else
+              COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" -- "${CHART_DIR}")
+            fi
+
+            echo "==> ${CHART} @ ${CURRENT} (last tag: ${LAST_TAG:-none})"
+
+            # Determine bump type — most significant wins
+            BUMP="none"
+            while IFS= read -r msg; do
+              if echo "${msg}" | grep -qE '^[a-z]+(\([^)]+\))?!:' || \
+                 echo "${msg}" | grep -qi 'BREAKING CHANGE'; then
+                BUMP="major"; break
+              fi
+            done <<< "${COMMITS}"
+
+            if [ "${BUMP}" = "none" ]; then
+              while IFS= read -r msg; do
+                if echo "${msg}" | grep -qE '^feat(\([^)]+\))?:'; then
+                  BUMP="minor"
+                fi
+              done <<< "${COMMITS}"
+            fi
+
+            if [ "${BUMP}" = "none" ]; then
+              while IFS= read -r msg; do
+                if echo "${msg}" | grep -qE '^fix(\([^)]+\))?:'; then
+                  BUMP="patch"
+                fi
+              done <<< "${COMMITS}"
+            fi
+
+            if [ "${BUMP}" = "none" ]; then
+              echo "    No releasable commits (fix/feat/feat!) — skipping ${CHART}"
+              continue
+            fi
+
+            # Semver bump
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT}"
+            case "${BUMP}" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+            echo "    Bump: ${BUMP} → ${CURRENT} to ${NEW_VERSION}"
+
+            # Only version is managed by CI. appVersion is metadata only —
+            # image tags are set as value overrides by ArgoCD/Kargo.
+            sed -i "s/^version: .*/version: ${NEW_VERSION}/" "${CHART_DIR}/Chart.yaml"
+
+            # Package and push to GHCR OCI
+            helm package "${CHART_DIR}" --destination /tmp/charts
+            helm push "/tmp/charts/${CHART}-${NEW_VERSION}.tgz" \
+              "oci://ghcr.io/${{ github.repository_owner }}/helm-charts"
+
+            echo "    Pushed oci://ghcr.io/${{ github.repository_owner }}/helm-charts/${CHART}:${NEW_VERSION}"
+
+            # Commit version bump and tag — sequential so no push conflicts
+            git add "${CHART_DIR}/Chart.yaml"
+            git commit -m "chore(${CHART}): release v${NEW_VERSION} [skip ci]"
+            git tag "${CHART}-v${NEW_VERSION}"
+
+          done < /tmp/changed-charts
+
+          # Single push at the end with all commits and tags
+          git push origin main --tags
