@@ -1,4 +1,4 @@
-# Observability umbrella chart — default values that can be overridden by the user
+# Observability umbrella chart — default values that can be overridden by the user via ArgoCD or Kargo
 
 # -- Grafana --
 grafana:
