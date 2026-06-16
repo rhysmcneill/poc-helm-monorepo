@@ -1,4 +1,4 @@
-# Observability umbrella chart — default values
+# Observability umbrella chart — default values that can be overridden by the user
 
 # -- Grafana --
 grafana:
