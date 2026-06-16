@@ -24,7 +24,7 @@ grafana:
           access: proxy
         - name: Tempo
           type: tempo
-          url: http://{{ .Release.Name }}-tempo:3100
+          url: http://{{ .Release.Name }}-tempo:3100 # change this to the tempo service name
           access: proxy
 
 # -- Loki --
