@@ -15,7 +15,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: rhysmcneill/helm-semver@v1.0.1
+      - uses: rhysmcneill/helm-semver@v1
         with:
           registry: oci://ghcr.io/${{ github.repository_owner }}/helm-charts
           registry-username: ${{ github.actor }}
