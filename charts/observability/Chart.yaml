@@ -2,7 +2,7 @@ apiVersion: v2
 name: observability
 description: Umbrella chart for the observability stack (Grafana, Loki, Tempo, Prometheus)
 type: application
-version: 0.1.0
+version: 0.2.0
 # appVersion is metadata only — not managed by CI.
 # Image tags are set as value overrides by ArgoCD/Kargo.
 appVersion: "1.0.0"
